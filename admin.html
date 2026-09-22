@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher Attendance Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+*{ box-sizing:border-box; }
+body{ margin:0; padding:15px; font-family:Arial,sans-serif; background:#f2f5f8; color:#222; }
+.container{ max-width:1000px; margin:auto; }
+h1{ text-align:center; margin-bottom:20px; }
+.card{ background:white; padding:18px; margin-bottom:15px; border-radius:14px; box-shadow:0 3px 12px rgba(0,0,0,.08); }
+input, select, button{ width:100%; padding:13px; margin-top:8px; margin-bottom:10px; border-radius:9px; border:1px solid #ccc; font-size:16px; }
+button{ background:#1769aa; color:white; border:none; font-weight:bold; cursor:pointer; }
+button:active{ opacity:.8; }
+.hidden{ display:none !important; }
+.success{ background:#dff5e3; color:#176b2c; padding:12px; border-radius:8px; margin-top:10px; }
+.error{ background:#ffe1e1; color:#a40000; padding:12px; border-radius:8px; margin-top:10px; }
+.info{ background:#e2f0ff; color:#075a9c; padding:12px; border-radius:8px; margin-top:10px; }
+.teacher{ padding:12px; border-bottom:1px solid #ddd; }
+.teacher:last-child{ border-bottom:none; }
+.status{ text-align:center; padding:10px; font-weight:bold; }
+table{ width:100%; border-collapse:collapse; font-size:13px; min-width:700px; }
+th, td{ border:1px solid #ddd; padding:8px; text-align:left; }
+th{ background:#eee; position:sticky; top:0; }
+.small{ font-size:13px; color:#666; }
+.history-scroll{ overflow-x:auto; margin-top:10px; }
+.filter-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.summary{ display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-top:12px; }
+.summary-box{ padding:12px; border-radius:10px; background:#f1f3f5; text-align:center; font-weight:bold; font-size:13px; }
+.logout-btn{ background:#a40000; }
+.today-btn{ background:#176b2c; }
+.module-title{ background:#eaf2ff; padding:13px; border-radius:10px; margin-bottom:15px; font-weight:bold; text-align:center; font-size:18px; color:#1e5c9e; }
+.photo-box{ text-align:center; margin-top:10px; }
+.photo-slots{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+.leave-card{ padding:14px; border:1px solid #e5e5e5; border-radius:12px; margin-bottom:12px; background:#fafafa; }
+.debug-box{ background:#fff8db; color:#725b00; padding:10px; border-radius:8px; margin-top:10px; font-size:13px; word-break:break-word; }
+.tabs{ display:flex; gap:6px; margin-top:10px; margin-bottom:15px; flex-wrap:wrap; }
+.tab-btn{ flex:1; padding:12px 8px; border:none; background:#e9eef3; color:#333; border-radius:9px; font-weight:bold; cursor:pointer; font-size:14px; margin:0; }
+.tab-btn.active{ background:#1769aa; color:white; }
+.tab-btn:active{ opacity:.85; }
+.shift-badge{ display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:bold; margin-left:6px; }
+.shift-morning{ background:#fff3cd; color:#856404; }
+.shift-evening{ background:#d1ecf1; color:#0c5460; }
+.shift-fulltime{ background:#d4edda; color:#155724; }
+@media(max-width:700px){
+body{ padding:8px; }
+.card{ padding:14px; }
+.filter-grid{ grid-template-columns:1fr; }
+.summary{ grid-template-columns:1fr 1fr; }
+.tabs{ flex-direction:column; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h1>📋 Teacher Attendance Admin</h1>
+
+<div id="loginCard" class="card">
+<h3>🔐 Admin Login</h3>
+<input type="password" id="adminPin" placeholder="Enter Admin PIN" inputmode="numeric">
+<button onclick="loginAdmin()">🔐 Login</button>
+<div id="loginMessage"></div>
+</div>
+
+<div id="adminPanel" class="hidden">
+
+<div class="module-title">👨‍🏫 Teacher Attendance Management</div>
+
+<div class="card">
+<h3>➕ Add Teacher</h3>
+<p class="small">Teacher ID prefix:<br>
+<b>M</b> = Morning (M1, M2...)<br>
+<b>E</b> = Evening (E1, E2...)<br>
+<b>D</b> = Full Time (D1, D2...)</p>
+<input type="text" id="teacherName" placeholder="Teacher Name">
+<input type="text" id="teacherId" placeholder="Teacher ID (e.g. M1, E1, D1)">
+<button onclick="addTeacher()">Add Teacher</button>
+<div id="addTeacherMessage"></div>
+</div>
+
+<div class="card">
+<h3>👨‍🏫 Teacher List</h3>
+<button onclick="loadTeachers()">🔄 Refresh Teachers</button>
+<div id="teacherList">Loading...</div>
+</div>
+
+<div class="card">
+<h3>📸 Face Enrollment (Up to 3 Photos)</h3>
+<p class="small">Select a teacher and take up to 3 clear front-face photos (different angles).</p>
+<select id="faceTeacherSelect" onchange="resetFaceEnrollment()"><option value="">Select Teacher</option></select>
+<div id="facePhotoSlots" class="photo-slots"></div>
+<input type="file" id="facePhotoInput" accept="image/*" capture="user" class="hidden" onchange="handleFacePhoto(event)">
+<button id="startFaceBtn" onclick="openPhoneCamera()">📷 Take Photo (1 of 3)</button>
+<button id="saveFaceBtn" onclick="saveFaceEnrollment()" disabled style="background:#176b2c;margin-top:6px;">💾 Save Enrollment</button>
+<button id="resetFaceBtn" onclick="resetFaceEnrollment()" style="display:none;background:#666;">🔄 Reset</button>
+<div id="cameraStatus" class="status">Ready</div>
+<div id="faceMessage"></div>
+</div>
+
+<div class="card">
+<h3>📝 Leave Requests</h3>
+<p class="small">Approve or reject teacher leave requests. Documents are permanently deleted after review.</p>
+<select id="leaveStatusFilter" onchange="loadLeaveRequests()">
+<option value="Pending">🕐 Pending</option>
+<option value="">📋 All</option>
+<option value="Approved">✅ Approved</option>
+<option value="Rejected">❌ Rejected</option>
+</select>
+<button onclick="loadLeaveRequests()">🔄 Refresh Leave Requests</button>
+<div id="leaveRequestsList">No data loaded.</div>
+</div>
+
+<div class="card">
+<h3>📋 Teacher Attendance History</h3>
+<p class="small">Auto-absent at 5:00 PM (Friday 1:00 PM), auto time-out at 5:30 PM.</p>
+
+<div class="tabs">
+<button class="tab-btn active" id="tab_all" onclick="switchTab('all')">📋 All</button>
+<button class="tab-btn" id="tab_morning" onclick="switchTab('morning')">🌅 Morning</button>
+<button class="tab-btn" id="tab_evening" onclick="switchTab('evening')">🌆 Evening</button>
+<button class="tab-btn" id="tab_fulltime" onclick="switchTab('fulltime')">🔄 Full Time</button>
+</div>
+
+<div class="filter-grid">
+<div><label class="small">From Date</label><input type="date" id="fromDate"></div>
+<div><label class="small">To Date</label><input type="date" id="toDate"></div>
+</div>
+<select id="historyTeacher"><option value="">👨‍🏫 All Teachers</option></select>
+<button class="today-btn" onclick="loadTodayAttendance()">📅 Today's Attendance</button>
+<button onclick="loadAttendanceHistory()">🔄 Load Attendance</button>
+<button onclick="clearAttendanceFilters()">🧹 Clear Filters</button>
+<div id="attendanceSummary"></div>
+<div id="attendanceHistory">No data loaded.</div>
+<div id="attendanceDebug"></div>
+</div>
+
+<div class="card">
+<button class="logout-btn" onclick="logoutAdmin()">🔒 Logout Admin</button>
+</div>
+
+</div>
+
+</div>
+
+<script>
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyMqFY27o36OkN4Xvd5B7rp70LixjbYmWHkqJhN4LqFgSvFIJ7JyVJuQScTBBMtjuP8OA/exec';
+
+const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+let modelsLoaded = false;
+let modelsLoading = false;
+let adminToken = '';
+let teacherCache = [];
+let capturedDescriptors = [];
+let activeTab = 'all';
+
+function escapeHtml(value){
+return String(value == null ? '' : value)
+.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+.replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function getErrorMessage(error){
+if(!error) return 'Unknown error';
+if(typeof error === 'string') return error;
+if(error.message) return error.message;
+if(error.details) return error.details;
+try{ return JSON.stringify(error); }catch(e){ return 'Unknown error'; }
+}
+function getShiftFromId(id){
+const s = String(id || '').trim().toUpperCase();
+if(s.charAt(0) === 'M') return 'morning';
+if(s.charAt(0) === 'E') return 'evening';
+if(s.charAt(0) === 'D') return 'fulltime';
+return '';
+}
+function getShiftLabel(shift){
+if(shift === 'morning') return '🌅 Morning';
+if(shift === 'evening') return '🌆 Evening';
+if(shift === 'fulltime') return '🔄 Full Time';
+return '';
+}
+function getShiftClass(shift){
+if(shift === 'morning') return 'shift-morning';
+if(shift === 'evening') return 'shift-evening';
+if(shift === 'fulltime') return 'shift-fulltime';
+return '';
+}
+function getTodayDate(){
+const now = new Date();
+return now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+}
+function setTodayDates(){
+const today = getTodayDate();
+document.getElementById('fromDate').value = today;
+document.getElementById('toDate').value = today;
+}
+
+async function callAPI(action, payload) {
+  const params = new URLSearchParams();
+  params.append('action', action);
+  if (payload) params.append('payload', JSON.stringify(payload));
+  const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: params });
+  return await res.json();
+}
+
+async function loginAdmin(){
+const pin = document.getElementById('adminPin').value.trim();
+const message = document.getElementById('loginMessage');
+if(!pin){ message.innerHTML = '<div class="error">Please enter Admin PIN.</div>'; return; }
+message.innerHTML = '<div class="info">🔐 Checking PIN...</div>';
+try {
+  const result = await callAPI('adminLogin', { pin: pin });
+  if(result && result.success){
+    adminToken = result.token || '';
+    if(!adminToken){ message.innerHTML = '<div class="error">Login successful, but token missing.</div>'; return; }
+    document.getElementById('loginCard').classList.add('hidden');
+    document.getElementById('adminPanel').classList.remove('hidden');
+    setTodayDates();
+    loadTeachers();
+    loadFaceModels();
+    setTimeout(function(){ loadTodayAttendance(); loadLeaveRequests(); }, 700);
+  } else {
+    message.innerHTML = '<div class="error">' + escapeHtml(result && result.message ? result.message : 'Invalid PIN') + '</div>';
+  }
+} catch(error){
+  message.innerHTML = '<div class="error">' + escapeHtml(getErrorMessage(error)) + '</div>';
+}
+}
+
+function switchTab(tab){
+activeTab = tab;
+document.querySelectorAll('.tab-btn').forEach(function(btn){ btn.classList.remove('active'); });
+document.getElementById('tab_' + tab).classList.add('active');
+fillHistoryTeacherSelect(teacherCache);
+loadTodayAttendance();
+}
+function getFilteredTeachers(){
+if(activeTab === 'all') return teacherCache;
+return teacherCache.filter(function(t){ return getShiftFromId(t.id) === activeTab; });
+}
+function filterRecordsByTab(records){
+if(activeTab === 'all') return records;
+return records.filter(function(row){ return getShiftFromId(row.teacherId) === activeTab; });
+}
+
+async function loadTeachers(){
+const list = document.getElementById('teacherList');
+list.innerHTML = '<div class="info">⏳ Loading teachers...</div>';
+try {
+  const result = await callAPI('adminGetTeachers', { token: adminToken });
+  if(!result || !result.success){
+    list.innerHTML = '<div class="error">' + escapeHtml(result && (result.message || result.error) ? (result.message || result.error) : 'Could not load teachers.') + '</div>';
+    return;
+  }
+  const teachers = result.teachers || [];
+  teacherCache = teachers;
+  fillFaceTeacherSelect(teachers);
+  fillHistoryTeacherSelect(teachers);
+  if(teachers.length === 0){ list.innerHTML = '<div class="info">No teachers found.</div>'; return; }
+  let html = '';
+  teachers.forEach(function(teacher){
+    const shift = getShiftFromId(teacher.id);
+    html += '<div class="teacher"><b>' + escapeHtml(teacher.name) + '</b>' +
+      '<span class="shift-badge ' + getShiftClass(shift) + '">' + getShiftLabel(shift) + '</span>' +
+      '<br>ID: ' + escapeHtml(teacher.id) + '<br>Status: ' + escapeHtml(teacher.status) + '</div>';
+  });
+  list.innerHTML = html;
+} catch(error){
+  list.innerHTML = '<div class="error">' + escapeHtml(getErrorMessage(error)) + '</div>';
+}
+}
+
+function fillFaceTeacherSelect(teachers){
+const select = document.getElementById('faceTeacherSelect');
+select.innerHTML = '<option value="">Select Teacher</option>';
+teachers.forEach(function(teacher){
+const option = document.createElement('option');
+option.value = teacher.id;
+option.textContent = teacher.name + ' — ' + teacher.id;
+option.dataset.name = teacher.name;
+select.appendChild(option);
+});
+}
+function fillHistoryTeacherSelect(teachers){
+const select = document.getElementById('historyTeacher');
+const prevValue = select.value;
+select.innerHTML = '<option value="">👨‍🏫 All Teachers</option>';
+getFilteredTeachers().forEach(function(teacher){
+const option = document.createElement('option');
+option.value = teacher.id;
+option.textContent = teacher.name + ' — ' + teacher.id;
+select.appendChild(option);
+});
+if(prevValue){
+const stillThere = getFilteredTeachers().some(function(t){ return t.id === prevValue; });
+if(stillThere) select.value = prevValue;
+}
+}
+
+async function addTeacher(){
+const name = document.getElementById('teacherName').value.trim();
+const id = document.getElementById('teacherId').value.trim();
+const message = document.getElementById('addTeacherMessage');
+if(!name || !id){ message.innerHTML = '<div class="error">Teacher Name and ID are required.</div>'; return; }
+const shift = getShiftFromId(id);
+if(!shift){
+  message.innerHTML = '<div class="error">Teacher ID must start with <b>M</b> (Morning), <b>E</b> (Evening), or <b>D</b> (Full Time).<br>Examples: M1, E1, D1</div>';
+  return;
+}
+message.innerHTML = '<div class="info">⏳ Adding teacher...</div>';
+try {
+  const result = await callAPI('adminAddTeacher', { token: adminToken, teacherName: name, idNumber: id });
+  if(result && result.success){
+    message.innerHTML = '<div class="success">✅ ' + escapeHtml(result.message || 'Teacher successfully added.') + '</div>';
+    document.getElementById('teacherName').value='';
+    document.getElementById('teacherId').value='';
+    loadTeachers();
+  } else {
+    message.innerHTML = '<div class="error">' + escapeHtml(result && result.message ? result.message : 'Could not add teacher.') + '</div>';
+  }
+} catch(error){
+  message.innerHTML = '<div class="error">' + escapeHtml(getErrorMessage(error)) + '</div>';
+}
+}
+
+async function loadFaceModels(){
+const status = document.getElementById('cameraStatus');
+const message = document.getElementById('faceMessage');
+if(modelsLoaded){ status.innerHTML = '✅ Face recognition ready.'; return; }
+if(modelsLoading){ return; }
+modelsLoading = true;
+try{
+if(typeof faceapi === 'undefined') throw new Error('face-api.js library could not be loaded.');
+status.innerHTML = '⏳ Loading...';
+message.innerHTML = '<div class="info">⏳ Loading face models (1/4)...</div>';
+await faceapi.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URL);
+message.innerHTML = '<div class="info">⏳ Loading face models (2/4)...</div>';
+await faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL);
+message.innerHTML = '<div class="info">⏳ Loading face models (3/4)...</div>';
+await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL);
+message.innerHTML = '<div class="info">⏳ Loading face models (4/4)...</div>';
+try{ await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL); }catch(e){}
+modelsLoaded = true;
+modelsLoading = false;
+status.innerHTML = '✅ Face recognition ready.';
+message.innerHTML = '<div class="success">✅ Face recognition is ready.</div>';
+} catch(error){
+modelsLoaded = false; modelsLoading = false;
+status.innerHTML = '❌ Face model loading failed.';
+message.innerHTML = '<div class="error"><b>❌ Face models could not be loaded.</b><br><br>' + escapeHtml(getErrorMessage(error)) + '</div>';
+}
+}
+
+function openPhoneCamera(){
+const select = document.getElementById('faceTeacherSelect');
+const message = document.getElementById('faceMessage');
+if(!select.value){ message.innerHTML = '<div class="error">Please select a teacher first.</div>'; return; }
+if(capturedDescriptors.length >= 3){ message.innerHTML = '<div class="info">Already captured 3 photos.</div>'; return; }
+if(!modelsLoaded){ message.innerHTML = '<div class="info">⏳ Face models loading...</div>'; if(!modelsLoading){ loadFaceModels(); } return; }
+document.getElementById('facePhotoInput').click();
+}
+function resetFaceEnrollment(){
+capturedDescriptors = [];
+document.getElementById('facePhotoSlots').innerHTML = '';
+document.getElementById('saveFaceBtn').disabled = true;
+document.getElementById('resetFaceBtn').style.display = 'none';
+document.getElementById('startFaceBtn').style.display = 'block';
+document.getElementById('startFaceBtn').textContent = '📷 Take Photo (1 of 3)';
+document.getElementById('cameraStatus').innerHTML = 'Ready';
+document.getElementById('faceMessage').innerHTML = '';
+}
+
+async function handleFacePhoto(event){
+const file = event.target.files && event.target.files[0];
+const message = document.getElementById('faceMessage');
+const status = document.getElementById('cameraStatus');
+const select = document.getElementById('faceTeacherSelect');
+if(!file) return;
+if(!select.value){ message.innerHTML = '<div class="error">Please select a teacher first.</div>'; event.target.value=''; return; }
+try{
+if(!modelsLoaded) throw new Error('Face recognition models are not ready.');
+message.innerHTML = '<div class="info">⏳ Reading photo...</div>';
+const imageData = await new Promise(function(resolve,reject){
+const reader = new FileReader();
+reader.onload = function(){ resolve(reader.result); };
+reader.onerror = function(){ reject(new Error('Could not read photo.')); };
+reader.readAsDataURL(file);
+});
+const image = await faceapi.fetchImage(imageData);
+let detection = null;
+try{ detection = await faceapi.detectSingleFace(image, new faceapi.SsdMobilenetv1Options({minConfidence:0.5})).withFaceLandmarks().withFaceDescriptor(); }catch(e){}
+if(!detection){ try{ detection = await faceapi.detectSingleFace(image, new faceapi.SsdMobilenetv1Options({minConfidence:0.3})).withFaceLandmarks().withFaceDescriptor(); }catch(e){} }
+if(!detection){
+try{
+if(!faceapi.nets.tinyFaceDetector.isLoaded) await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+detection = await faceapi.detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:0.4})).withFaceLandmarks().withFaceDescriptor();
+}catch(e){}
+}
+if(!detection){
+status.innerHTML = '❌ Face not detected.';
+message.innerHTML = '<div class="error">❌ Face was not detected. Please take another photo.</div>';
+event.target.value='';
+return;
+}
+const descriptor = Array.from(detection.descriptor);
+if(!Array.isArray(descriptor) || descriptor.length !== 128) throw new Error('Invalid descriptor.');
+capturedDescriptors.push(descriptor);
+const slotIdx = capturedDescriptors.length;
+const slots = document.getElementById('facePhotoSlots');
+const slot = document.createElement('div');
+slot.style.cssText = 'width:80px;height:80px;border-radius:10px;overflow:hidden;border:2px solid #176b2c;position:relative;';
+slot.innerHTML = '<img src="'+imageData+'" style="width:100%;height:100%;object-fit:cover;"><div style="position:absolute;bottom:0;left:0;right:0;background:rgba(23,107,44,.85);color:#fff;font-size:10px;text-align:center;">#'+slotIdx+'</div>';
+slots.appendChild(slot);
+status.innerHTML = '✅ Photo '+slotIdx+' captured.';
+message.innerHTML = '<div class="success">✅ Photo '+slotIdx+' captured.</div>';
+document.getElementById('saveFaceBtn').disabled = false;
+document.getElementById('resetFaceBtn').style.display = 'block';
+if(capturedDescriptors.length >= 3){
+document.getElementById('startFaceBtn').style.display = 'none';
+message.innerHTML = '<div class="success">✅ 3 photos captured. Click Save Enrollment.</div>';
+} else {
+document.getElementById('startFaceBtn').textContent = '📷 Take Photo ('+(capturedDescriptors.length+1)+' of 3)';
+}
+}
+catch(error){
+message.innerHTML = '<div class="error">❌ ' + escapeHtml(getErrorMessage(error)) + '</div>';
+status.innerHTML = '❌ Failed.';
+}
+finally{ event.target.value = ''; }
+}
+
+async function saveFaceEnrollment(){
+const select = document.getElementById('faceTeacherSelect');
+const message = document.getElementById('faceMessage');
+const status = document.getElementById('cameraStatus');
+if(!select.value){ message.innerHTML = '<div class="error">Please select a teacher.</div>'; return; }
+if(capturedDescriptors.length < 1){ message.innerHTML = '<div class="error">Please capture at least 1 photo.</div>'; return; }
+const option = select.options[select.selectedIndex];
+const teacherId = select.value;
+const teacherName = option.dataset.name || option.textContent;
+status.innerHTML = '☁️ Saving...';
+message.innerHTML = '<div class="info">⏳ Saving face enrollment...</div>';
+document.getElementById('saveFaceBtn').disabled = true;
+const descriptorsToSave = capturedDescriptors.slice();
+try {
+  const result = await callAPI('adminSaveFaceDescriptor', { token: adminToken, teacherId: teacherId, teacherName: teacherName, descriptors: descriptorsToSave });
+  if(result && result.success){
+    message.innerHTML = '<div class="success">✅ ' + escapeHtml(result.message) + '<br><b>Teacher:</b> ' + escapeHtml(teacherName) + '<br><b>Photos:</b> ' + descriptorsToSave.length + '</div>';
+    status.innerHTML = '✅ Complete.';
+    capturedDescriptors = [];
+    document.getElementById('facePhotoSlots').innerHTML = '';
+    document.getElementById('saveFaceBtn').disabled = true;
+    document.getElementById('resetFaceBtn').style.display = 'none';
+    document.getElementById('startFaceBtn').style.display = 'block';
+    document.getElementById('startFaceBtn').textContent = '📷 Take Photo (1 of 3)';
+  } else {
+    message.innerHTML = '<div class="error">❌ ' + escapeHtml(result && result.message ? result.message : 'Save failed.') + '</div>';
+    status.innerHTML = '❌ Failed.';
+    document.getElementById('saveFaceBtn').disabled = false;
+  }
+} catch(error){
+  message.innerHTML = '<div class="error">❌ ' + escapeHtml(getErrorMessage(error)) + '</div>';
+  status.innerHTML = '❌ Failed.';
+  document.getElementById('saveFaceBtn').disabled = false;
+}
+}
+
+async function loadLeaveRequests(){
+const box = document.getElementById('leaveRequestsList');
+const status = document.getElementById('leaveStatusFilter').value;
+if(!adminToken){ box.innerHTML = '<div class="error">Admin session missing.</div>'; return; }
+box.innerHTML = '<div class="info">⏳ Loading leave requests...</div>';
+try {
+  const res = await callAPI('adminGetLeaveRequests', { token: adminToken, status: status });
+  if(!res || !res.success){ box.innerHTML = '<div class="error">' + escapeHtml((res && res.message) || 'Error') + '</div>'; return; }
+  renderLeaveRequests(res.requests || []);
+} catch(err){
+  box.innerHTML = '<div class="error">' + escapeHtml((err && err.message) || 'Server error') + '</div>';
+}
+}
+function renderLeaveRequests(requests){
+const box = document.getElementById('leaveRequestsList');
+if(!requests.length){ box.innerHTML = '<div class="info">📭 No leave requests found.</div>'; return; }
+let html = '';
+requests.forEach(function(r){
+const requestId = r.requestId;
+const safeId = String(requestId).replace(/[^A-Za-z0-9_-]/g, '');
+const shift = getShiftFromId(r.teacherId);
+html += '<div class="leave-card">';
+html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;"><b style="font-size:15px;">' + escapeHtml(r.teacherName) + '</b><span class="shift-badge ' + getShiftClass(shift) + '">' + getShiftLabel(shift) + '</span><span style="font-size:12px;background:#eaf2ff;color:#1e5c9e;padding:3px 10px;border-radius:20px;">' + escapeHtml(r.status) + '</span></div>';
+html += '<div style="font-size:13px;color:#555;margin-top:6px;">ID: ' + escapeHtml(r.teacherId) + '</div>';
+html += '<div style="margin-top:10px;font-size:14px;line-height:1.6;">';
+html += '<b>Type:</b> ' + escapeHtml(r.leaveType) + '<br>';
+html += '<b>Dates:</b> ' + escapeHtml(r.fromDate) + ' → ' + escapeHtml(r.toDate) + '<br>';
+html += '<b>Reason:</b> ' + escapeHtml(r.reason) + '<br>';
+html += '<b>Submitted:</b> ' + escapeHtml(r.submittedOn) + '<br>';
+if(r.hasDocument){
+if(r.documentViewUrl){
+html += '<b>Document:</b> <a href="'+escapeHtml(r.documentUrl)+'" target="_blank" style="color:#1e5c9e;">Open in Drive</a><br><img src="'+escapeHtml(r.documentViewUrl)+'" style="max-width:260px;border-radius:8px;margin-top:8px;border:1px solid #ddd;">';
+} else {
+html += '<b>Document:</b> <a href="'+escapeHtml(r.documentUrl)+'" target="_blank" style="color:#1e5c9e;">' + escapeHtml(r.documentName || 'View') + '</a><br>';
+}
+} else {
+html += '<b>Document:</b> <i>None</i><br>';
+}
+if(r.reviewedOn) html += '<b>Reviewed:</b> ' + escapeHtml(r.reviewedOn) + '<br>';
+if(r.adminRemarks) html += '<b>Remarks:</b> ' + escapeHtml(r.adminRemarks) + '<br>';
+html += '</div>';
+if(r.status === 'Pending'){
+html += '<div style="margin-top:12px;"><input type="text" id="remarks_'+safeId+'" placeholder="Remarks (optional)" style="margin-bottom:8px;"><div style="display:flex;gap:8px;"><button onclick="approveLeaveRequest(\''+safeId+'\')" style="background:#176b2c;margin:0;">✅ Approve</button><button onclick="rejectLeaveRequest(\''+safeId+'\')" style="background:#a40000;margin:0;">❌ Reject</button></div></div>';
+}
+html += '</div>';
+});
+box.innerHTML = html;
+}
+async function approveLeaveRequest(requestId){
+if(!confirm('Approve this leave request? Attendance for these dates will be marked as "On Leave" and document deleted.')) return;
+const remarksEl = document.getElementById('remarks_'+requestId);
+const remarks = remarksEl ? remarksEl.value.trim() : '';
+document.getElementById('leaveRequestsList').innerHTML = '<div class="info">⏳ Approving...</div>';
+try {
+  const res = await callAPI('adminApproveLeave', { token: adminToken, requestId: requestId, remarks: remarks });
+  if(res && res.success) alert('✅ ' + res.message); else alert('❌ ' + ((res && res.message) || 'Failed'));
+  loadLeaveRequests();
+  loadTodayAttendance();
+} catch(err){
+  alert('Server error: ' + ((err && err.message) || 'unknown'));
+  loadLeaveRequests();
+}
+}
+async function rejectLeaveRequest(requestId){
+if(!confirm('Reject this leave request? Document will be deleted.')) return;
+const remarksEl = document.getElementById('remarks_'+requestId);
+const remarks = remarksEl ? remarksEl.value.trim() : '';
+document.getElementById('leaveRequestsList').innerHTML = '<div class="info">⏳ Rejecting...</div>';
+try {
+  const res = await callAPI('adminRejectLeave', { token: adminToken, requestId: requestId, remarks: remarks });
+  if(res && res.success) alert('✅ ' + res.message); else alert('❌ ' + ((res && res.message) || 'Failed'));
+  loadLeaveRequests();
+} catch(err){
+  alert('Server error: ' + ((err && err.message) || 'unknown'));
+  loadLeaveRequests();
+}
+}
+
+async function loadTodayAttendance(){
+const box = document.getElementById('attendanceHistory');
+const summary = document.getElementById('attendanceSummary');
+const debug = document.getElementById('attendanceDebug');
+if(!adminToken){ box.innerHTML = '<div class="error">Admin session missing.</div>'; return; }
+box.innerHTML = '<div class="info">⏳ Loading TODAY attendance...</div>';
+summary.innerHTML=''; debug.innerHTML='';
+try {
+  const result = await callAPI('adminGetToday', { token: adminToken });
+  if(!result || !result.success){
+    const errorText = result && (result.error || result.message) ? (result.error || result.message) : 'Could not load.';
+    box.innerHTML = '<div class="error">❌ ' + escapeHtml(errorText) + '</div>';
+    return;
+  }
+  let records = result.records || [];
+  records = filterRecordsByTab(records);
+  const serverDate = result.date || '';
+  const tabLabel = activeTab === 'all' ? 'All' : activeTab === 'morning' ? 'Morning' : activeTab === 'evening' ? 'Evening' : 'Full Time';
+  debug.innerHTML = '<div class="debug-box"><b>Tab:</b> ' + tabLabel + '<br><b>Server Date:</b> ' + escapeHtml(serverDate) + '<br><b>Records:</b> ' + records.length + '</div>';
+  const selectedTeacher = document.getElementById('historyTeacher').value.trim();
+  let filteredRecords = records;
+  if(selectedTeacher){
+    filteredRecords = records.filter(function(row){
+      return String(row.teacherId || '').trim().toLowerCase() === selectedTeacher.trim().toLowerCase();
+    });
+  }
+  if(filteredRecords.length===0){
+    box.innerHTML = '<div class="info">📭 No records found for <b>' + tabLabel + '</b>.<br>Server Date: ' + escapeHtml(serverDate || 'Unknown') + '</div>';
+    summary.innerHTML='';
+    return;
+  }
+  renderAttendanceRecords(filteredRecords, summary, box);
+} catch(error){
+  box.innerHTML = '<div class="error">❌ Request failed.<br><br>' + escapeHtml(getErrorMessage(error)) + '</div>';
+}
+}
+
+async function loadAttendanceHistory(){
+const box = document.getElementById('attendanceHistory');
+const summary = document.getElementById('attendanceSummary');
+const debug = document.getElementById('attendanceDebug');
+const fromDate = document.getElementById('fromDate').value.trim();
+const toDate = document.getElementById('toDate').value.trim();
+const teacherId = document.getElementById('historyTeacher').value.trim();
+if(!adminToken){ box.innerHTML = '<div class="error">Admin session missing.</div>'; return; }
+if(fromDate && toDate && fromDate>toDate){ box.innerHTML = '<div class="error">From Date cannot be later than To Date.</div>'; return; }
+box.innerHTML = '<div class="info">⏳ Loading attendance history...</div>';
+summary.innerHTML=''; debug.innerHTML='';
+try {
+  const result = await callAPI('adminGetHistory', { token: adminToken, fromDate: fromDate, toDate: toDate, teacherId: teacherId });
+  if(!result || !result.success){
+    box.innerHTML = '<div class="error">❌ ' + escapeHtml(result && (result.error || result.message) ? (result.error || result.message) : 'Could not load.') + '</div>';
+    return;
+  }
+  let records = result.records || [];
+  records = filterRecordsByTab(records);
+  const tabLabel = activeTab === 'all' ? 'All' : activeTab === 'morning' ? 'Morning' : activeTab === 'evening' ? 'Evening' : 'Full Time';
+  debug.innerHTML = '<div class="debug-box"><b>Tab:</b> ' + tabLabel + '<br><b>Records:</b> ' + records.length + '<br>From: ' + escapeHtml(fromDate || 'All') + '<br>To: ' + escapeHtml(toDate || 'All') + '</div>';
+  if(records.length===0){
+    box.innerHTML = '<div class="info">📭 No records found for <b>' + tabLabel + '</b>.</div>';
+    summary.innerHTML='';
+    return;
+  }
+  renderAttendanceRecords(records, summary, box);
+} catch(error){
+  box.innerHTML = '<div class="error">❌ Request failed.<br><br>' + escapeHtml(getErrorMessage(error)) + '</div>';
+}
+}
+
+function renderAttendanceRecords(records, summary, box){
+let present=0, late=0, absent=0, withTimeOut=0, onLeave=0, shortLeave=0;
+records.forEach(function(row){
+const p = String(row.punctuality || '').trim();
+if(p === 'On Time' || p === 'Present') present++;
+if(p === 'Late') late++;
+if(p === 'Absent') absent++;
+if(p === 'On Leave') onLeave++;
+if(p === 'Short Leave') shortLeave++;
+if(row.timeOut) withTimeOut++;
+});
+summary.innerHTML = '<div class="summary">' +
+'<div class="summary-box">📊 Total<br>' + records.length + '</div>' +
+'<div class="summary-box">✅ Present<br>' + present + '</div>' +
+'<div class="summary-box">⏰ Late<br>' + late + '</div>' +
+'<div class="summary-box">🚫 Absent<br>' + absent + '</div>' +
+'<div class="summary-box">🌴 On Leave<br>' + onLeave + '</div>' +
+'<div class="summary-box">⚡ Short Leave<br>' + shortLeave + '</div>' +
+'</div>';
+let html = '<div class="history-scroll"><table><tr><th>Date</th><th>Teacher</th><th>ID</th><th>Time In</th><th>Time Out</th><th>Location</th><th>Punctuality</th></tr>';
+records.forEach(function(row){
+const p = String(row.punctuality || '').trim();
+let style='';
+if(p === 'Late' || p === 'Absent') style = 'color:#a40000;font-weight:bold;';
+else if(p === 'Present' || p === 'On Time') style = 'color:#176b2c;font-weight:bold;';
+else if(p === 'On Leave') style = 'color:#856404;font-weight:bold;';
+else if(p === 'Short Leave') style = 'color:#b8860b;font-weight:bold;';
+const shift = getShiftFromId(row.teacherId);
+const shiftBadge = '<span class="shift-badge ' + getShiftClass(shift) + '">' + getShiftLabel(shift) + '</span>';
+html += '<tr><td>'+escapeHtml(row.date)+'</td><td>'+escapeHtml(row.teacherName)+shiftBadge+'</td><td>'+escapeHtml(row.teacherId)+'</td><td>'+escapeHtml(row.timeIn)+'</td><td>'+escapeHtml(row.timeOut)+'</td><td>'+escapeHtml(row.locationStatus)+'</td><td style="'+style+'">'+escapeHtml(row.punctuality)+'</td></tr>';
+});
+html += '</table></div>';
+box.innerHTML = html;
+}
+
+function clearAttendanceFilters(){
+document.getElementById('historyTeacher').value='';
+setTodayDates();
+document.getElementById('attendanceSummary').innerHTML='';
+document.getElementById('attendanceDebug').innerHTML='';
+document.getElementById('attendanceHistory').innerHTML = '<div class="info">Filters cleared.</div>';
+}
+
+function logoutAdmin(){
+adminToken = '';
+document.getElementById('adminPanel').classList.add('hidden');
+document.getElementById('loginCard').classList.remove('hidden');
+document.getElementById('adminPin').value='';
+document.getElementById('loginMessage').innerHTML = '<div class="info">You have been logged out.</div>';
+}
+
+window.addEventListener('load', function(){
+console.log('Teacher Attendance Admin (Standalone) loaded.');
+});
+</script>
+
+</body>
+</html>

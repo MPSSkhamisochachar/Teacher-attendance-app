@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teacher Face Attendance</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+* { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif; }
+body { margin: 0; padding: 16px; background: #f4f6f8; color: #222; }
+h2 { font-size: 20px; margin: 8px 0 16px; text-align: center; }
+.sync-bar { padding: 9px; text-align: center; font-size: 13px; border-radius: 7px; margin-bottom: 14px; }
+.online { background: #d4edda; color: #155724; }
+.offline { background: #f8d7da; color: #721c24; }
+.card { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 1px 5px rgba(0,0,0,.10); max-width: 430px; margin: 0 auto; }
+.face-box { width: 100%; min-height: 230px; border: 2px dashed #bbb; border-radius: 12px; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; background: #fafafa; margin-bottom: 14px; position: relative; }
+.face-box video { width: 100%; max-height: 380px; object-fit: cover; display: none; border-radius: 10px; }
+.face-box img { width: 100%; max-height: 330px; object-fit: contain; display: none; }
+.face-placeholder { padding: 25px; color: #666; font-size: 14px; line-height: 1.5; }
+button { cursor: pointer; }
+button.primary { width: 100%; padding: 15px; font-size: 16px; background: #1e5c9e; color: #fff; border: none; border-radius: 10px; margin-top: 10px; }
+button.primary:disabled { background: #aab8c6; cursor: not-allowed; }
+button.capture { background: #1a7a3c; }
+button.cancel { background: #b02a2a; }
+.type-row { display: flex; gap: 10px; margin-top: 14px; }
+.type-btn { flex: 1; padding: 16px 8px; text-align: center; border-radius: 10px; border: 2px solid #ddd; font-size: 15px; font-weight: 600; color: #555; cursor: pointer; }
+.type-btn.active-in { border-color: #1a7a3c; background: #eaf7ee; color: #1a7a3c; }
+.type-btn.active-out { border-color: #b02a2a; background: #fbeaea; color: #b02a2a; }
+.teacher-result { display: none; padding: 13px; margin-top: 12px; border-radius: 8px; background: #eaf2ff; color: #164b82; text-align: center; font-weight: 600; }
+.msg { padding: 12px; border-radius: 8px; margin-top: 14px; font-size: 14px; text-align: center; line-height: 1.4; }
+.ok { background: #d4edda; color: #155724; }
+.err { background: #f8d7da; color: #721c24; }
+.pending { background: #fff3cd; color: #856404; }
+.hidden { display: none !important; }
+.small { text-align: center; color: #777; font-size: 12px; margin-top: 12px; line-height: 1.4; }
+.tabs { display: flex; gap: 10px; margin-bottom: 14px; max-width: 430px; margin-left: auto; margin-right: auto; }
+.tabs button { flex: 1; padding: 12px; border: 2px solid #ccc; background: #fff; border-radius: 10px; font-size: 14px; font-weight: 600; color: #555; cursor: pointer; }
+.tabs button.active { border-color: #1e5c9e; background: #eaf2ff; color: #1e5c9e; }
+textarea { width: 100%; padding: 12px; border-radius: 9px; border: 1px solid #ccc; font-size: 15px; font-family: inherit; margin-top: 8px; margin-bottom: 10px; resize: vertical; }
+select { width: 100%; padding: 13px; border-radius: 9px; border: 1px solid #ccc; font-size: 16px; margin-top: 8px; margin-bottom: 10px; background: #fff; }
+label { display: block; margin-top: 12px; font-size: 13px; color: #444; font-weight: 600; }
+input[type="date"] { width: 100%; padding: 12px; border-radius: 9px; border: 1px solid #ccc; font-size: 15px; margin-top: 8px; margin-bottom: 10px; background: #fff; }
+input[type="file"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 9px; margin-top: 8px; background: #fff; font-size: 14px; }
+.shift-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold; margin-top: 6px; }
+.shift-morning { background: #fff3cd; color: #856404; }
+.shift-evening { background: #d1ecf1; color: #0c5460; }
+.shift-fulltime { background: #d4edda; color: #155724; }
+</style>
+</head>
+<body>
+
+<div id="syncBar" class="sync-bar online">🟢 Online</div>
+
+<h2>🏫 Teacher Face Attendance</h2>
+
+<div class="tabs">
+<button id="tabFaceBtn" class="active" onclick="showTab('face')">📷 Face Attendance</button>
+<button id="tabLeaveBtn" onclick="showTab('leave')">📝 Leave Request</button>
+</div>
+
+<div id="faceTab">
+<div class="card">
+<div class="face-box">
+<div id="facePlaceholder" class="face-placeholder">
+📷
+<br><br>
+Tap <b>Scan My Face</b> below to open the live camera.
+</div>
+<video id="cameraPreview" autoplay playsinline muted></video>
+<img id="facePreview" alt="Face Preview">
+</div>
+
+<button class="primary" id="scanBtn" onclick="openCamera()">📷 Scan My Face</button>
+<button class="primary capture hidden" id="captureBtn" onclick="capturePhoto()">📸 Capture Photo</button>
+<button class="primary cancel hidden" id="cancelCamBtn" onclick="cancelCamera()">✖ Cancel Camera</button>
+
+<div id="teacherResult" class="teacher-result"></div>
+
+<label style="display:block;margin-top:18px;font-size:13px;color:#444;">Attendance Type</label>
+<div class="type-row">
+<div class="type-btn" id="btnIn" onclick="selectType('In')">🟢 Time In</div>
+<div class="type-btn" id="btnOut" onclick="selectType('Out')">🔴 Time Out</div>
+</div>
+
+<button class="primary" id="submitBtn" onclick="submitAttendance()" disabled>📍 Submit Attendance</button>
+
+<div id="statusMsg"></div>
+<div class="small">
+Live face recognition and school GPS verification are required.<br>
+Please use <b>Google Chrome</b> browser only.
+</div>
+</div>
+</div>
+
+<div id="leaveTab" style="display:none;">
+<div class="card">
+<h3 style="text-align:center;margin-top:0;">📝 Leave Request</h3>
+
+<label>Select Your Name</label>
+<select id="leaveTeacherSelect" onchange="loadMyLeaveRequests()">
+<option value="">-- Select Teacher --</option>
+</select>
+
+<label>Leave Type</label>
+<select id="leaveTypeSelect">
+<option value="">-- Select Leave Type --</option>
+<option value="Sick Leave">🤒 Sick Leave</option>
+<option value="Casual Leave">🌴 Casual Leave</option>
+</select>
+
+<label>From Date</label>
+<input type="date" id="leaveFromDate">
+
+<label>To Date</label>
+<input type="date" id="leaveToDate">
+
+<label>Upload Document (Optional — PDF / JPG / PNG, max 5 MB)</label>
+<input type="file" id="leaveFile" accept="application/pdf,image/jpeg,image/png">
+
+<label>Reason</label>
+<textarea id="leaveReason" rows="3" maxlength="500" placeholder="Please write the reason for leave..."></textarea>
+
+<button class="primary" id="leaveSubmitBtn" onclick="submitLeaveRequest()">📤 Submit Leave Request</button>
+<div id="leaveMsg"></div>
+</div>
+
+<div class="card">
+<h3 style="text-align:center;margin-top:0;">📋 My Leave Status</h3>
+<button class="primary" onclick="loadMyLeaveRequests()">🔄 Refresh Status</button>
+<div id="myLeaveList" style="margin-top:12px;">
+<div class="msg pending">Select your name above to see your leave status.</div>
+</div>
+</div>
+</div>
+
+<script>
+/* =========================================================
+CONFIG — APPS SCRIPT URL
+========================================================= */
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyMqFY27o36OkN4Xvd5B7rp70LixjbYmWHkqJhN4LqFgSvFIJ7JyVJuQScTBBMtjuP8OA/exec';
+
+/* =========================================================
+GLOBAL STATE
+========================================================= */
+let selectedType = '';
+let faceModelsLoaded = false;
+let faceDataLoaded = false;
+let faceRecords = [];
+let recognizedTeacher = null;
+let processingPhoto = false;
+let cameraStream = null;
+let cameraActive = false;
+
+const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+
+/* =========================================================
+HELPERS
+========================================================= */
+function escapeHtml(value) {
+return String(value || '')
+.replace(/&/g, '&amp;')
+.replace(/</g, '&lt;')
+.replace(/>/g, '&gt;')
+.replace(/"/g, '&quot;')
+.replace(/'/g, '&#039;');
+}
+
+function getShiftFromId(id) {
+const s = String(id || '').trim().toUpperCase();
+if (s.charAt(0) === 'M') return 'morning';
+if (s.charAt(0) === 'E') return 'evening';
+if (s.charAt(0) === 'D') return 'fulltime';
+return '';
+}
+
+function getShiftLabel(shift) {
+if (shift === 'morning') return '🌅 Morning';
+if (shift === 'evening') return '🌆 Evening';
+if (shift === 'fulltime') return '🔄 Full Time';
+return '';
+}
+
+function getShiftClass(shift) {
+if (shift === 'morning') return 'shift-morning';
+if (shift === 'evening') return 'shift-evening';
+if (shift === 'fulltime') return 'shift-fulltime';
+return '';
+}
+
+function isSupportedBrowser() {
+  const ua = navigator.userAgent.toLowerCase();
+  const blocked = ['hola', 'ucbrowser', 'uc browser', 'opera mini',
+    'opr/', 'miuibrowser', 'samsungbrowser', 'fbav', 'fban'];
+  for (let i = 0; i < blocked.length; i++) {
+    if (ua.indexOf(blocked[i]) !== -1) return false;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    return false;
+  }
+  return true;
+}
+
+/* =========================================================
+API CALLER — fetch() to Apps Script
+========================================================= */
+async function callAPI(action, payload) {
+  const params = new URLSearchParams();
+  params.append('action', action);
+  if (payload) params.append('payload', JSON.stringify(payload));
+
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    body: params
+  });
+  return await res.json();
+}
+
+/* =========================================================
+INIT
+========================================================= */
+window.addEventListener('load', function() {
+  updateInternetStatus();
+
+  if (!isSupportedBrowser()) {
+    setStatus('err',
+      '⚠️ Aap ka browser face attendance support nahi karta.<br><br>' +
+      '<b>Please Google Chrome use karein.</b><br><br>' +
+      'Hola, UC Browser, Opera Mini, aur kuch purane browsers attendance ke liye allowed nahi hain.'
+    );
+    document.getElementById('scanBtn').disabled = true;
+    document.getElementById('scanBtn').style.background = '#aab8c6';
+    document.getElementById('scanBtn').textContent = '🚫 Browser Not Supported';
+    return;
+  }
+
+  loadFaceModels();
+});
+
+function updateInternetStatus() {
+  const bar = document.getElementById('syncBar');
+  if (navigator.onLine) {
+    bar.className = 'sync-bar online';
+    bar.textContent = '🟢 Online';
+  } else {
+    bar.className = 'sync-bar offline';
+    bar.textContent = '🔴 Offline — Attendance disabled';
+  }
+}
+
+window.addEventListener('online', function() { updateInternetStatus(); });
+window.addEventListener('offline', function() { updateInternetStatus(); });
+
+/* =========================================================
+LOAD FACE MODELS
+========================================================= */
+async function loadFaceModels() {
+  try {
+    setStatus('pending', 'Loading face recognition models...');
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(FACE_MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL);
+    try {
+      await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+    } catch (e) {
+      console.warn('TinyFaceDetector not loaded (optional fallback).', e);
+    }
+    faceModelsLoaded = true;
+    setStatus('pending', 'Loading teacher face data...');
+    loadFaceData();
+  } catch (error) {
+    console.error(error);
+    setStatus('err', 'Face recognition models could not be loaded. Please check your internet connection and reopen the page.');
+  }
+}
+
+async function loadFaceData() {
+  try {
+    const res = await callAPI('getFaceDescriptors');
+    if (!res || !res.success || !Array.isArray(res.faces)) {
+      setStatus('err', res && res.error ? res.error : 'Face data could not be loaded.');
+      return;
+    }
+    faceRecords = res.faces;
+    faceDataLoaded = true;
+    if (faceRecords.length === 0) {
+      setStatus('err', 'No teacher face has been enrolled yet.');
+      return;
+    }
+    setStatus('ok', faceRecords.length + ' enrolled teacher face(s) are ready. Please tap Scan My Face.');
+  } catch (error) {
+    console.error(error);
+    setStatus('err', 'Teacher face data could not be loaded from the server.');
+  }
+}
+
+/* =========================================================
+OPEN CAMERA
+========================================================= */
+async function openCamera() {
+  if (!navigator.onLine) {
+    setStatus('err', '🔴 Internet is offline. Internet access is required for face attendance.');
+    return;
+  }
+  if (!faceModelsLoaded) {
+    setStatus('pending', 'Face recognition is still loading...');
+    return;
+  }
+  if (!faceDataLoaded) {
+    setStatus('pending', 'Teacher face data is still loading...');
+    return;
+  }
+  if (cameraActive || processingPhoto) return;
+
+  if (!isSupportedBrowser()) {
+    setStatus('err', '⚠️ Please Google Chrome use karein. Aap ka browser camera support nahi karta.');
+    return;
+  }
+
+  try {
+    setStatus('pending', '📷 Opening live camera...');
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    });
+
+    const video = document.getElementById('cameraPreview');
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    document.getElementById('facePlaceholder').style.display = 'none';
+    document.getElementById('facePreview').style.display = 'none';
+
+    await new Promise(function(resolve) {
+      if (video.readyState >= 2) return resolve();
+      video.onloadedmetadata = function() { resolve(); };
+      setTimeout(resolve, 2000);
+    });
+
+    cameraActive = true;
+    document.getElementById('scanBtn').classList.add('hidden');
+    document.getElementById('captureBtn').classList.remove('hidden');
+    document.getElementById('cancelCamBtn').classList.remove('hidden');
+    setStatus('pending', '👤 Position your face in the frame, then tap Capture.');
+  } catch (err) {
+    console.error('Camera error:', err);
+    stopCamera();
+
+    let errorMsg = '📷 Camera could not be opened.';
+    if (err.name === 'NotAllowedError') {
+      errorMsg = '❌ Camera permission denied hai. Please Settings mein jaakar Chrome ko camera permission dein, phir page reload karein.';
+    } else if (err.name === 'NotFoundError') {
+      errorMsg = '❌ Koi camera nahi mila is device par.';
+    } else if (err.name === 'NotReadableError') {
+      errorMsg = '❌ Camera kisi aur app ne use kar liya hai. Baaki apps band karein aur try karein.';
+    } else {
+      errorMsg += ' Please Chrome browser use karein aur camera permission allow karein.';
+    }
+    setStatus('err', errorMsg);
+  }
+}
+
+function stopCamera() {
+  try {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(function(track) { track.stop(); });
+      cameraStream = null;
+    }
+    const video = document.getElementById('cameraPreview');
+    video.srcObject = null;
+    video.style.display = 'none';
+  } catch (e) {}
+  cameraActive = false;
+}
+
+function cancelCamera() {
+  stopCamera();
+  document.getElementById('scanBtn').classList.remove('hidden');
+  document.getElementById('captureBtn').classList.add('hidden');
+  document.getElementById('cancelCamBtn').classList.add('hidden');
+  document.getElementById('facePlaceholder').style.display = 'block';
+  document.getElementById('facePreview').style.display = 'none';
+  setStatus('pending', 'Camera closed.');
+}
+
+/* =========================================================
+CAPTURE PHOTO
+========================================================= */
+async function capturePhoto() {
+  if (!cameraActive) return;
+  if (processingPhoto) return;
+  processingPhoto = true;
+  document.getElementById('captureBtn').disabled = true;
+  setStatus('pending', '📸 Capturing photo...');
+
+  try {
+    const video = document.getElementById('cameraPreview');
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, width, height);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const imageData = canvas.toDataURL('image/jpeg', 0.85);
+    stopCamera();
+
+    const preview = document.getElementById('facePreview');
+    preview.src = imageData;
+    preview.style.display = 'block';
+    document.getElementById('facePlaceholder').style.display = 'none';
+    document.getElementById('scanBtn').classList.remove('hidden');
+    document.getElementById('captureBtn').classList.add('hidden');
+    document.getElementById('cancelCamBtn').classList.add('hidden');
+
+    await processCapturedImage(imageData);
+  } catch (error) {
+    console.error(error);
+    setStatus('err', '❌ Could not capture photo: ' + error.message);
+    document.getElementById('captureBtn').disabled = false;
+  } finally {
+    processingPhoto = false;
+    document.getElementById('captureBtn').disabled = false;
+  }
+}
+
+/* =========================================================
+PROCESS IMAGE
+========================================================= */
+async function processCapturedImage(imageData) {
+  try {
+    setStatus('pending', '👤 Detecting face...');
+    const image = await faceapi.fetchImage(imageData);
+
+    let detection = null;
+    try {
+      detection = await faceapi.detectSingleFace(image, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+        .withFaceLandmarks().withFaceDescriptor();
+    } catch (e) {}
+    if (!detection) {
+      try {
+        detection = await faceapi.detectSingleFace(image, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 }))
+          .withFaceLandmarks().withFaceDescriptor();
+      } catch (e) {}
+    }
+    if (!detection) {
+      try {
+        if (!faceapi.nets.tinyFaceDetector.isLoaded) {
+          await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+        }
+        detection = await faceapi.detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 }))
+          .withFaceLandmarks().withFaceDescriptor();
+      } catch (e) {}
+    }
+
+    if (!detection) {
+      throw new Error('Face could not be detected. Please take a clear photo in good lighting with your face looking toward the camera.');
+    }
+
+    const descriptor = detection.descriptor;
+    if (!descriptor || descriptor.length !== 128) {
+      throw new Error('Face descriptor could not be generated.');
+    }
+
+    setStatus('pending', '🔍 Matching with enrolled faces...');
+
+    const labeledDescriptors = faceRecords.map(function(record) {
+      let descs = [];
+      if (Array.isArray(record.descriptors) && record.descriptors.length > 0) {
+        descs = record.descriptors;
+      } else if (Array.isArray(record.descriptor) && record.descriptor.length === 128) {
+        descs = [record.descriptor];
+      }
+      const floatDescs = descs
+        .filter(function(d) { return Array.isArray(d) && d.length === 128; })
+        .map(function(d) { return new Float32Array(d); });
+      return new faceapi.LabeledFaceDescriptors(record.teacherId, floatDescs);
+    });
+
+    const faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55);
+    const bestMatch = faceMatcher.findBestMatch(descriptor);
+
+    if (!bestMatch || bestMatch.label === 'unknown') {
+      recognizedTeacher = null;
+      document.getElementById('teacherResult').style.display = 'none';
+      document.getElementById('submitBtn').disabled = true;
+      setStatus('err', '❌ Face did not match. Attendance will not be allowed.');
+      return;
+    }
+
+    const matchedTeacher = faceRecords.find(function(record) {
+      return record.teacherId === bestMatch.label;
+    });
+
+    if (!matchedTeacher) {
+      throw new Error('The matched teacher record could not be found.');
+    }
+
+    recognizedTeacher = {
+      teacherId: matchedTeacher.teacherId,
+      teacherName: matchedTeacher.teacherName,
+      distance: bestMatch.distance
+    };
+
+    const shift = getShiftFromId(matchedTeacher.teacherId);
+    const shiftBadge = shift
+      ? '<span class="shift-badge ' + getShiftClass(shift) + '">' + getShiftLabel(shift) + '</span>'
+      : '';
+
+    const resultEl = document.getElementById('teacherResult');
+    resultEl.innerHTML =
+      '👤 ' + escapeHtml(matchedTeacher.teacherName) + '<br>' +
+      '<span style="font-size:12px;">ID: ' + escapeHtml(matchedTeacher.teacherId) + '</span><br>' +
+      shiftBadge;
+    resultEl.style.display = 'block';
+
+    document.getElementById('submitBtn').disabled = !selectedType;
+    setStatus('ok', '✅ Face successfully matched. Now select Time In or Time Out.');
+  } catch (error) {
+    console.error(error);
+    recognizedTeacher = null;
+    document.getElementById('submitBtn').disabled = true;
+    setStatus('err', error.message || 'The photo could not be processed.');
+  }
+}
+
+/* =========================================================
+SELECT TYPE
+========================================================= */
+function selectType(type) {
+  selectedType = type;
+  document.getElementById('btnIn').classList.toggle('active-in', type === 'In');
+  document.getElementById('btnOut').classList.toggle('active-out', type === 'Out');
+  document.getElementById('submitBtn').disabled = !recognizedTeacher;
+}
+
+/* =========================================================
+GET LOCATION
+========================================================= */
+function getLocation() {
+  return new Promise(function(resolve, reject) {
+    if (!navigator.geolocation) {
+      reject('This device does not support location services.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function(pos) { resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }); },
+      function(error) {
+        console.error(error);
+        reject('Location could not be obtained. Please turn on GPS/location and try again.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+}
+
+/* =========================================================
+SUBMIT ATTENDANCE
+========================================================= */
+async function submitAttendance() {
+  if (!recognizedTeacher) { setStatus('err', 'Please scan your face first.'); return; }
+  if (!selectedType) { setStatus('err', 'Please select Time In or Time Out.'); return; }
+  if (!navigator.onLine) { setStatus('err', '🔴 Internet is offline. Attendance cannot be saved.'); return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  setStatus('pending', '📍 Verifying school location...');
+
+  try {
+    const location = await getLocation();
+    const data = {
+      teacherId: recognizedTeacher.teacherId,
+      teacherName: recognizedTeacher.teacherName,
+      type: selectedType,
+      lat: location.lat,
+      lng: location.lng
+    };
+
+    setStatus('pending', 'Verifying attendance with the server...');
+    const res = await callAPI('markAttendance', data);
+
+    if (res && res.success) {
+      const shift = res.shift || getShiftFromId(recognizedTeacher.teacherId);
+      const shiftLabel = getShiftLabel(shift);
+      const puncText = res.punctuality ? ' — ' + escapeHtml(res.punctuality) : '';
+      const shiftText = shiftLabel ? ' <small>(' + shiftLabel + ')</small>' : '';
+
+      setStatus('ok',
+        '✅ ' + escapeHtml(res.teacherName || recognizedTeacher.teacherName) +
+        shiftText + ' — ' + escapeHtml(res.type || selectedType) +
+        ' marked at ' + escapeHtml(res.time || '') + puncText);
+      resetAttendance();
+      return;
+    }
+
+    if (res && res.outsideSchool) {
+      setStatus('err', '⚠️ You are not within the school premises. Attendance was NOT saved.');
+    } else {
+      setStatus('err', res && res.error ? res.error : 'Attendance could not be saved.');
+    }
+    btn.disabled = false;
+  } catch (error) {
+    btn.disabled = false;
+    setStatus('err', error);
+  }
+}
+
+/* =========================================================
+RESET
+========================================================= */
+function resetAttendance() {
+  recognizedTeacher = null;
+  selectedType = '';
+  document.getElementById('teacherResult').style.display = 'none';
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('btnIn').classList.remove('active-in');
+  document.getElementById('btnOut').classList.remove('active-out');
+  const preview = document.getElementById('facePreview');
+  preview.src = '';
+  preview.style.display = 'none';
+  document.getElementById('facePlaceholder').style.display = 'block';
+  document.getElementById('scanBtn').classList.remove('hidden');
+  document.getElementById('captureBtn').classList.add('hidden');
+  document.getElementById('cancelCamBtn').classList.add('hidden');
+  stopCamera();
+}
+
+/* =========================================================
+STATUS
+========================================================= */
+function setStatus(type, message) {
+  document.getElementById('statusMsg').innerHTML = '<div class="msg ' + type + '">' + message + '</div>';
+}
+
+/* =========================================================
+LEAVE REQUEST TAB
+========================================================= */
+function showTab(name) {
+  const faceTab = document.getElementById('faceTab');
+  const leaveTab = document.getElementById('leaveTab');
+  const faceBtn = document.getElementById('tabFaceBtn');
+  const leaveBtn = document.getElementById('tabLeaveBtn');
+
+  if (name === 'leave') {
+    if (cameraActive) cancelCamera();
+    faceTab.style.display = 'none';
+    leaveTab.style.display = 'block';
+    leaveBtn.classList.add('active');
+    faceBtn.classList.remove('active');
+    loadLeaveTeacherSelect();
+    const selected = document.getElementById('leaveTeacherSelect').value;
+    if (selected) loadMyLeaveRequests();
+  } else {
+    faceTab.style.display = 'block';
+    leaveTab.style.display = 'none';
+    faceBtn.classList.add('active');
+    leaveBtn.classList.remove('active');
+  }
+}
+
+async function loadLeaveTeacherSelect() {
+  const sel = document.getElementById('leaveTeacherSelect');
+  if (sel.dataset.loaded === '1') return;
+  try {
+    const res = await callAPI('getTeachers');
+    if (!res || !res.success) return;
+    const teachers = res.teachers || [];
+    sel.innerHTML = '<option value="">-- Select Teacher --</option>';
+    teachers.forEach(function(t) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      const shift = getShiftFromId(t.id);
+      const shiftLabel = getShiftLabel(shift);
+      opt.textContent = t.name + ' — ' + t.id + (shiftLabel ? ' (' + shiftLabel + ')' : '');
+      sel.appendChild(opt);
+    });
+    sel.dataset.loaded = '1';
+  } catch (e) { console.error(e); }
+}
+
+function showLeaveMsg(type, text) {
+  document.getElementById('leaveMsg').innerHTML = '<div class="msg ' + type + '">' + escapeHtml(text) + '</div>';
+}
+
+async function submitLeaveRequest() {
+  const teacherId = document.getElementById('leaveTeacherSelect').value;
+  const leaveType = document.getElementById('leaveTypeSelect').value;
+  const fromDate = document.getElementById('leaveFromDate').value;
+  const toDate = document.getElementById('leaveToDate').value;
+  const reason = document.getElementById('leaveReason').value.trim();
+  const fileInput = document.getElementById('leaveFile');
+  const file = fileInput.files && fileInput.files[0];
+
+  if (!teacherId) return showLeaveMsg('err', 'Please select your name.');
+  if (!leaveType) return showLeaveMsg('err', 'Please select leave type.');
+  if (!fromDate || !toDate) return showLeaveMsg('err', 'Please select From and To dates.');
+  if (fromDate > toDate) return showLeaveMsg('err', 'From date cannot be after To date.');
+  if (!reason) return showLeaveMsg('err', 'Please enter a reason.');
+  if (file && file.size > 5 * 1024 * 1024) return showLeaveMsg('err', 'File too large (max 5 MB).');
+
+  const submitBtn = document.getElementById('leaveSubmitBtn');
+
+  const proceed = async function(filePayload) {
+    showLeaveMsg('pending', '⏳ Submitting leave request...');
+    submitBtn.disabled = true;
+    try {
+      const res = await callAPI('submitLeave', {
+        teacherId: teacherId,
+        leaveType: leaveType,
+        fromDate: fromDate,
+        toDate: toDate,
+        reason: reason,
+        file: filePayload
+      });
+      submitBtn.disabled = false;
+      if (res && res.success) {
+        showLeaveMsg('ok', '✅ ' + (res.message || 'Submitted.'));
+        document.getElementById('leaveTypeSelect').value = '';
+        document.getElementById('leaveFromDate').value = '';
+        document.getElementById('leaveToDate').value = '';
+        document.getElementById('leaveReason').value = '';
+        fileInput.value = '';
+        loadMyLeaveRequests();
+      } else {
+        showLeaveMsg('err', (res && res.message) || 'Submission failed.');
+      }
+    } catch (err) {
+      submitBtn.disabled = false;
+      showLeaveMsg('err', (err && err.message) || 'Server error.');
+    }
+  };
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      proceed({ base64: e.target.result, name: file.name, mime: file.type, size: file.size });
+    };
+    reader.onerror = function() { showLeaveMsg('err', 'Could not read the file.'); };
+    reader.readAsDataURL(file);
+  } else {
+    proceed(null);
+  }
+}
+
+async function loadMyLeaveRequests() {
+  const teacherId = document.getElementById('leaveTeacherSelect').value;
+  const box = document.getElementById('myLeaveList');
+
+  if (!teacherId) {
+    box.innerHTML = '<div class="msg pending">Select your name to see your leave status.</div>';
+    return;
+  }
+
+  box.innerHTML = '<div class="msg pending">⏳ Loading...</div>';
+
+  try {
+    const res = await callAPI('getMyLeaves', { teacherId: teacherId });
+    if (!res || !res.success) {
+      box.innerHTML = '<div class="msg err">' + escapeHtml((res && res.message) || 'Error') + '</div>';
+      return;
+    }
+    renderMyLeaves(res.requests || []);
+  } catch (err) {
+    box.innerHTML = '<div class="msg err">' + escapeHtml((err && err.message) || 'Server error') + '</div>';
+  }
+}
+
+function renderMyLeaves(requests) {
+  const box = document.getElementById('myLeaveList');
+  if (!requests.length) {
+    box.innerHTML = '<div class="msg pending">No leave requests yet.</div>';
+    return;
+  }
+
+  let html = '';
+  requests.forEach(function(r) {
+    let statusClass = 'pending';
+    if (r.status === 'Approved') statusClass = 'ok';
+    else if (r.status === 'Rejected') statusClass = 'err';
+
+    html += '<div style="padding:12px;margin:10px 0;border:1px solid #eee;border-radius:10px;background:#fafafa;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<b>' + escapeHtml(r.leaveType) + '</b>' +
+      '<span class="msg ' + statusClass + '" style="display:inline-block;padding:3px 10px;margin:0;font-size:12px;">' +
+      escapeHtml(r.status) + '</span></div>';
+    html += '<div style="font-size:13px;margin-top:8px;line-height:1.5;">';
+    html += '📅 <b>' + escapeHtml(r.fromDate) + '</b> → <b>' + escapeHtml(r.toDate) + '</b><br>';
+    html += '📝 ' + escapeHtml(r.reason) + '<br>';
+    if (r.adminRemarks) html += '💬 <i>' + escapeHtml(r.adminRemarks) + '</i><br>';
+    html += '<small style="color:#888;">Submitted: ' + escapeHtml(r.submittedOn) + '</small>';
+    html += '</div></div>';
+  });
+
+  box.innerHTML = html;
+}
+</script>
+</body>
+</html>
